@@ -3,18 +3,14 @@ const router = express.Router();
 
 const {
   createExamUser,
-  getExamUser,
-  updateStats,
-  updateLiveIndicator,
+  loginExamUser,
   submitExam,
-  setFinalMarks
+  sendResultsByRange
 } = require("../controller/examUserController");
 
 router.post("/", createExamUser);
-router.get("/:applicationNumber", getExamUser);
-router.put("/:applicationNumber/stats", updateStats);
-router.put("/:applicationNumber/live", updateLiveIndicator);
-router.put("/:applicationNumber/submit", submitExam);
-router.put("/:applicationNumber/result", setFinalMarks);
+router.post("/login", loginExamUser);
+router.put("/submit/:applicationNumber", submitExam);
+router.post("/results/send-range", sendResultsByRange);
 
 module.exports = router;

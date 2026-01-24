@@ -1,6 +1,11 @@
 const ExamUser = require("../model/ExamUser");
 const { sendMail } = require("../utils/sendMail");
-const { swcetRegistrationMail } = require("../utils/emailTemplates");
+const {
+    swcetRegistrationMail,
+    examSubmittedMail,
+    examResultMail,
+    examTerminationMail
+} = require("../utils/emailTemplates");
 
 const createExamUser = async (req, res) => {
     try {
@@ -73,134 +78,177 @@ const createExamUser = async (req, res) => {
     }
 };
 
-
-
-
-/*
-  @desc    Get User by Application Number
-  @route   GET /api/exam-users/:applicationNumber
-*/
-const getExamUser = async (req, res) => {
+const loginExamUser = async (req, res) => {
     try {
-        const user = await ExamUser.findOne({
-            applicationNumber: req.params.applicationNumber
-        });
+        const { applicationNumber, dob } = req.body;
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        if (!applicationNumber || !dob) {
+            return res.status(400).json({
+                message: "Application Number and DOB are required"
+            });
         }
 
-        res.json(user);
+        // Convert DOB to Date object (normalize)
+        const inputDob = new Date(dob);
+
+        const user = await ExamUser.findOne({ applicationNumber });
+
+        if (!user) {
+            return res.status(404).json({
+                message: "Invalid Application Number or DOB"
+            });
+        }
+
+        // Compare DOB (ignore time part)
+        const userDob = new Date(user.dob);
+
+        if (userDob.toISOString().split("T")[0] !== inputDob.toISOString().split("T")[0]) {
+            return res.status(401).json({
+                message: "Invalid Application Number or DOB"
+            });
+        }
+
+        // Optional: Prevent login if terminated
+        if (user.terminated) {
+            return res.status(403).json({
+                message: "Your exam has been terminated. Please contact support."
+            });
+        }
+
+        res.status(200).json({
+            message: "Login successful",
+            user
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-/*
-  @desc    Update Stats
-  @route   PUT /api/exam-users/:applicationNumber/stats
-*/
-const updateStats = async (req, res) => {
+const submitExam = async (req, res) => {
     try {
+        const { stats, liveIndicator, finalMarks, terminated } = req.body;
+
         const user = await ExamUser.findOne({
-            applicationNumber: req.params.applicationNumber
+            applicationNumber: req.params.applicationNumber,
         });
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        user.stats = { ...user.stats._doc, ...req.body };
-        await user.save();
-
-        res.json(user);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-/*
-  @desc    Update Live Indicator
-  @route   PUT /api/exam-users/:applicationNumber/live
-*/
-const updateLiveIndicator = async (req, res) => {
-    try {
-        const user = await ExamUser.findOne({
-            applicationNumber: req.params.applicationNumber
-        });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        if (user.isSubmitted) {
+            return res.status(400).json({ message: "Exam already submitted" });
         }
 
-        user.liveIndicator = { ...user.liveIndicator._doc, ...req.body };
+        // ✅ Update according to schema
+        user.stats = stats;
+        user.liveIndicator = liveIndicator;
+        user.finalMarks = finalMarks;
+        user.isSubmitted = true;
+        user.examTiming.submittedAt = new Date();
 
-        // Auto Termination Logic
-        if (user.liveIndicator.warningCount >= 5) {
+        // ✅ Mark terminated if auto submitted
+        if (terminated) {
             user.terminated = true;
         }
 
         await user.save();
 
-        res.json(user);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
+        /* ================= EMAIL SECTION ================= */
 
-/*
-  @desc    Submit Exam
-  @route   PUT /api/exam-users/:applicationNumber/submit
-*/
-const submitExam = async (req, res) => {
-    try {
-        const user = await ExamUser.findOne({
-            applicationNumber: req.params.applicationNumber
-        });
+        if (user.email) {
+            const formattedDate = new Date(
+                user.examTiming.submittedAt
+            ).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                dateStyle: "full",
+                timeStyle: "short",
+            });
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            const html = examSubmittedMail(
+                user.name,
+                user.applicationNumber,
+                formattedDate
+            );
+
+            await sendMail(
+                user.email,
+                "SW-CET 2026 – Exam Submission Confirmation",
+                null,
+                html
+            );
         }
 
-        user.isSubmitted = true;
-        await user.save();
+        /* ================================================= */
 
         res.json({ message: "Exam submitted successfully" });
+
     } catch (error) {
+        console.error("Submit Exam Error:", error);
         res.status(500).json({ message: error.message });
     }
 };
 
-/*
-  @desc    Set Final Marks
-  @route   PUT /api/exam-users/:applicationNumber/result
-*/
-const setFinalMarks = async (req, res) => {
-    try {
-        const { finalMarks } = req.body;
+const sendResultsByRange = async (req, res) => {
+  try {
+    const { fromAppNo, toAppNo } = req.body;
 
-        const user = await ExamUser.findOne({
-            applicationNumber: req.params.applicationNumber
-        });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        user.finalMarks = finalMarks;
-        await user.save();
-
-        res.json(user);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+    if (!fromAppNo || !toAppNo) {
+      return res.status(400).json({
+        message: "fromAppNo and toAppNo are required"
+      });
     }
+
+    const users = await ExamUser.find({
+      applicationNumber: {
+        $gte: fromAppNo,
+        $lte: toAppNo
+      },
+      isSubmitted: true
+    }).sort({ applicationNumber: 1 });
+
+    if (!users.length) {
+      return res.status(404).json({
+        message: "No submitted users found in this range"
+      });
+    }
+
+    for (const user of users) {
+      if (!user.email) continue;
+
+      let html;
+
+      if (user.terminated) {
+        html = examTerminationMail(user);
+      } else {
+        html = examResultMail(user);
+      }
+
+      await sendMail(
+        user.email,
+        user.terminated
+          ? "SW-CET 2026 – Exam Termination Notice"
+          : "SW-CET 2026 – Result Notification",
+        null,
+        html
+      );
+    }
+
+    res.json({
+      message: `Results sent successfully to ${users.length} candidates`
+    });
+
+  } catch (error) {
+    console.error("Send Results Error:", error);
+    res.status(500).json({ message: error.message });
+  }
 };
+
 
 module.exports = {
     createExamUser,
-    getExamUser,
-    updateStats,
-    updateLiveIndicator,
+    loginExamUser,
     submitExam,
-    setFinalMarks
+    sendResultsByRange
 };

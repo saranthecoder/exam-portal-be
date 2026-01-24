@@ -111,6 +111,135 @@ const swcetRegistrationMail = (
     `
   );
 
+/* 🎓 EXAM SUBMISSION CONFIRMATION */
+const examSubmittedMail = (name, applicationNumber, submittedAt) =>
+  baseTemplate(
+    "SW-CET 2026 – Exam Submitted Successfully",
+    `
+    <p>Dear <strong>${name}</strong>,</p>
+
+    <p>
+      This is to confirm that your <strong>SW-CET 2026</strong> examination
+      has been successfully submitted.
+    </p>
+
+    <p>
+      <strong>Application Number:</strong> ${applicationNumber}<br/>
+      <strong>Submission Time:</strong> ${submittedAt}
+    </p>
+
+    <p>
+      Your responses have been securely recorded in our system.
+      Results will be communicated as per the official schedule.
+    </p>
+
+    <p>
+      If you have any concerns, please contact our support team.
+    </p>
+    `
+  );
+
+const examResultMail = (user) =>
+   baseTemplate(
+    "SW-CET 2026 – Official Result Notification",
+    `
+    <p>Dear <strong>${user.name}</strong>,</p>
+
+    <p>
+      We are pleased to inform you that your <strong>SW-CET 2026</strong> 
+      examination has been successfully evaluated.
+    </p>
+
+    <div style="
+        margin: 24px 0;
+        padding: 24px;
+        background: #f4f7ff;
+        border-left: 6px solid #2b6cb0;
+        border-radius: 8px;
+        text-align: center;
+      ">
+      <p style="margin: 0; font-size: 14px; color: #555;">
+        FINAL SCORE
+      </p>
+      <p style="
+          margin: 8px 0 0 0;
+          font-size: 36px;
+          font-weight: bold;
+          color: #2b6cb0;
+        ">
+        ${user.finalMarks} <span style="font-size:18px; color:#555;">/ 200</span>
+      </p>
+    </div>
+
+    <h3 style="margin-top:30px;">Examination Details</h3>
+    <p>
+      <strong>Application Number:</strong> ${user.applicationNumber}<br/>
+      <strong>Exam Date:</strong> ${new Date(user.examTiming.examDate).toLocaleDateString("en-IN")}
+    </p>
+
+    <h3 style="margin-top:30px;">Performance Summary</h3>
+    <p>
+      <strong>Total Questions:</strong> ${user.stats.total}<br/>
+      <strong>Answered:</strong> ${user.stats.answered}<br/>
+      <strong>Unanswered:</strong> ${user.stats.notAnswered}
+    </p>
+
+    <div style="
+        margin-top:30px;
+        padding:18px;
+        background:#f9fafc;
+        border-radius:8px;
+        border:1px solid #e2e8f0;
+      ">
+      <p style="margin:0;">
+        Based on the official cutoff criteria, our admissions team will contact you 
+        within <strong>24 hours</strong> regarding your eligibility for:
+      </p>
+
+      <ul style="margin-top:10px;">
+        <li><strong>Saredufy Launchpad</strong> – Scholarship up to <strong>75%</strong></li>
+        <li><strong>WebNexZ Fellowship</strong> – <strong>100% Scholarship</strong></li>
+      </ul>
+    </div>
+
+    <p style="margin-top:30px;">
+      Thank you for participating in SW-CET 2026. 
+      We appreciate your effort and look forward to connecting with you.
+    </p>
+    `
+  );
+
+
+
+const examTerminationMail = (user) =>
+  baseTemplate(
+    "SW-CET 2026 – Exam Termination Notice",
+    `
+    <p>Dear <strong>${user.name}</strong>,</p>
+
+    <p>
+      Your SW-CET 2026 examination was terminated due to violation of examination guidelines.
+    </p>
+
+    <h3>🚨 Proctoring Details</h3>
+    <p>
+      <strong>Total Warnings:</strong> ${user.liveIndicator.warningCount}<br/>
+      <strong>Tab Switches:</strong> ${user.liveIndicator.tabSwitchCount}<br/>
+      <strong>Face Off Count:</strong> ${user.liveIndicator.faceOffCount}<br/>
+      <strong>Noise Detected:</strong> ${user.liveIndicator.noiseDetectedCount}
+    </p>
+
+    <p>
+      As per examination policy, terminated exams are not eligible for evaluation.
+    </p>
+    `
+  );
+
+
+
 module.exports = {
-  swcetRegistrationMail
+  examResultMail,
+  examTerminationMail,
+  swcetRegistrationMail,
+  examSubmittedMail
 };
