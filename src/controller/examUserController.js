@@ -18,10 +18,14 @@ const createExamUser = async (req, res) => {
         }
 
         // Generate Application Number
-        const fullYear = new Date().getFullYear();
-        const year = fullYear.toString().slice(-2);
-        const prefix = `SWCET${year}`;
+        const now = new Date();
 
+        const year = now.getFullYear().toString().slice(-2); // 26
+        const month = (now.getMonth() + 1).toString().padStart(2, "0"); // 01
+
+        const prefix = `SWCET${year}${month}`; // SWCET2601
+
+        // Find last user of same year+month
         const lastUser = await ExamUser.findOne({
             applicationNumber: { $regex: `^${prefix}` }
         }).sort({ applicationNumber: -1 });
@@ -29,12 +33,15 @@ const createExamUser = async (req, res) => {
         let nextCount = 1;
 
         if (lastUser) {
-            const lastNumber = lastUser.applicationNumber.slice(-4);
+            const lastNumber = lastUser.applicationNumber.slice(-2); // last 2 digits
             nextCount = parseInt(lastNumber) + 1;
         }
 
-        const paddedCount = nextCount.toString().padStart(4, "0");
+        // Always 2 digit counter
+        const paddedCount = nextCount.toString().padStart(2, "0");
+
         const applicationNumber = `${prefix}${paddedCount}`;
+
 
         // Create User
         const user = await ExamUser.create({
@@ -191,58 +198,58 @@ const submitExam = async (req, res) => {
 };
 
 const sendResultsByRange = async (req, res) => {
-  try {
-    const { fromAppNo, toAppNo } = req.body;
+    try {
+        const { fromAppNo, toAppNo } = req.body;
 
-    if (!fromAppNo || !toAppNo) {
-      return res.status(400).json({
-        message: "fromAppNo and toAppNo are required"
-      });
+        if (!fromAppNo || !toAppNo) {
+            return res.status(400).json({
+                message: "fromAppNo and toAppNo are required"
+            });
+        }
+
+        const users = await ExamUser.find({
+            applicationNumber: {
+                $gte: fromAppNo,
+                $lte: toAppNo
+            },
+            isSubmitted: true
+        }).sort({ applicationNumber: 1 });
+
+        if (!users.length) {
+            return res.status(404).json({
+                message: "No submitted users found in this range"
+            });
+        }
+
+        for (const user of users) {
+            if (!user.email) continue;
+
+            let html;
+
+            if (user.terminated) {
+                html = examTerminationMail(user);
+            } else {
+                html = examResultMail(user);
+            }
+
+            await sendMail(
+                user.email,
+                user.terminated
+                    ? "SW-CET 2026 – Exam Termination Notice"
+                    : "SW-CET 2026 – Result Notification",
+                null,
+                html
+            );
+        }
+
+        res.json({
+            message: `Results sent successfully to ${users.length} candidates`
+        });
+
+    } catch (error) {
+        console.error("Send Results Error:", error);
+        res.status(500).json({ message: error.message });
     }
-
-    const users = await ExamUser.find({
-      applicationNumber: {
-        $gte: fromAppNo,
-        $lte: toAppNo
-      },
-      isSubmitted: true
-    }).sort({ applicationNumber: 1 });
-
-    if (!users.length) {
-      return res.status(404).json({
-        message: "No submitted users found in this range"
-      });
-    }
-
-    for (const user of users) {
-      if (!user.email) continue;
-
-      let html;
-
-      if (user.terminated) {
-        html = examTerminationMail(user);
-      } else {
-        html = examResultMail(user);
-      }
-
-      await sendMail(
-        user.email,
-        user.terminated
-          ? "SW-CET 2026 – Exam Termination Notice"
-          : "SW-CET 2026 – Result Notification",
-        null,
-        html
-      );
-    }
-
-    res.json({
-      message: `Results sent successfully to ${users.length} candidates`
-    });
-
-  } catch (error) {
-    console.error("Send Results Error:", error);
-    res.status(500).json({ message: error.message });
-  }
 };
 
 
