@@ -17,15 +17,25 @@ const createExamUser = async (req, res) => {
             });
         }
 
-        // Generate Application Number
+        /* ================= CHECK DUPLICATE REGISTRATION ================= */
+        const existingUser = await ExamUser.findOne({
+            email: email,
+            "examTiming.examDate": new Date(examDate)
+        });
+
+        if (existingUser) {
+            return res.status(409).json({
+                message: "This email is already registered for the selected exam date."
+            });
+        }
+
+        /* ================= GENERATE APPLICATION NUMBER ================= */
         const now = new Date();
+        const year = now.getFullYear().toString().slice(-2);
+        const month = (now.getMonth() + 1).toString().padStart(2, "0");
 
-        const year = now.getFullYear().toString().slice(-2); // 26
-        const month = (now.getMonth() + 1).toString().padStart(2, "0"); // 01
+        const prefix = `SWCET${year}${month}`;
 
-        const prefix = `SWCET${year}${month}`; // SWCET2601
-
-        // Find last user of same year+month
         const lastUser = await ExamUser.findOne({
             applicationNumber: { $regex: `^${prefix}` }
         }).sort({ applicationNumber: -1 });
@@ -33,17 +43,14 @@ const createExamUser = async (req, res) => {
         let nextCount = 1;
 
         if (lastUser) {
-            const lastNumber = lastUser.applicationNumber.slice(-2); // last 2 digits
+            const lastNumber = lastUser.applicationNumber.slice(-2);
             nextCount = parseInt(lastNumber) + 1;
         }
 
-        // Always 2 digit counter
         const paddedCount = nextCount.toString().padStart(2, "0");
-
         const applicationNumber = `${prefix}${paddedCount}`;
 
-
-        // Create User
+        /* ================= CREATE USER ================= */
         const user = await ExamUser.create({
             applicationNumber,
             name,
@@ -51,10 +58,11 @@ const createExamUser = async (req, res) => {
             phone,
             email,
             examTiming: {
-                examDate
+                examDate: new Date(examDate)
             }
         });
 
+        /* ================= FORMAT DATE ================= */
         const formattedDate = new Date(examDate).toLocaleString("en-IN", {
             timeZone: "Asia/Kolkata",
             dateStyle: "full",
@@ -62,7 +70,6 @@ const createExamUser = async (req, res) => {
         });
 
         const examLink = "https://swcet.saredufywpa.in/";
-
         const subject = "SWCET Examination Registration Confirmation";
 
         const html = swcetRegistrationMail(
